@@ -1,10 +1,15 @@
+#----Swapan Mallick
+#----1 January 2025
+#
 import os
 import subprocess
 from pathlib import Path
 import shutil
 
 # Experiment Configuration
-EXP = "CARRA2_WINT"
+# Change here 
+
+EXP = "CARRA2"
 INPUT = f"/scratch/swe4281/DDPM_DATA/{EXP}"
 OUTPUT = f"/scratch/swe4281/DDPM_DATA/{EXP}/NCFILES"
 os.makedirs(OUTPUT, exist_ok=True)
@@ -19,7 +24,7 @@ print(YY, MM)
 ens_mem = range(10)  # Members from 0 to 9
 
 # Input Files and Parameters
-FAFILE = ['ICMSHHARM+0000']
+FAFILE = ['ICMSHHARM+0006']
 
 # Load Parameters from External File
 params_file = 'list_ALL.txt'
@@ -32,15 +37,12 @@ with open(params_file, 'r') as f:
 for file_name in FAFILE:
     for DD in range(DTSTR, DTEND):  # Adjust this range if needed
         DDN = f"{DD:02}"
-        for HH in ['12']:
-        #for HH in ['00', '06', '12', '18']:
+        for HH in ['00', '06', '12', '18']:
             for mem in ens_mem:
                 mem_IN = Path(f"{INPUT}/{YY}/{MM}/{DDN}/{HH}/mbr00{mem}")
                 mem_OUT = Path(f"{OUTPUT}/{YY}/{MM}/{DDN}/{HH}/mbr00{mem}/FC{file_name[11:14]}")
-                EC_DISK = Path(f"ec:/swe4281/DDPM_NCDATA/{EXP}/{YY}/{MM}/{DDN}/{HH}/mbr00{mem}/FC{file_name[11:14]}")
 
                 # Create necessary directories
-                subprocess.run(['emkdir', '-p', str(EC_DISK)])
                 os.makedirs(mem_OUT, exist_ok=True)
 
                 # Change to the input directory
@@ -59,12 +61,5 @@ for file_name in FAFILE:
                     if src_file.exists():
                         shutil.move(src_file, dest_file)
                         print(f"Moved {src_file} to {dest_file}")
-
-                    # Copy files to EC disk
-                    ec_cp = ['ecp', str(dest_file), str(EC_DISK)]
-                    subprocess.run(ec_cp)
-
-                    ec_cp1 = ['ecp', str(mem_IN / file_name), str(EC_DISK)]
-                    subprocess.run(ec_cp1)
 
 print("Processing complete.")

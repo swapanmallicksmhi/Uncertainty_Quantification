@@ -13,9 +13,11 @@
 #-------------------------------
 set -evx
 module load python3
+
+# Change the script and workdir directory here
+SCRDIR= AAAAA
+WORKDIR= BBBBB
 #
-SCRDIR=/home/swe4281/POSTPROCESS_EPS/DL_UNCERTAINTY/2025_DATAEXTRAC/DataDownload_ERA5_EDA_FEB2025
-WORKDIR=/ec/res4/scratch/swe4281/DDPM_DATA/Era5EDA_DIRECT
 mkdir -p ${WORKDIR}
 cd ${WORKDIR}
 echo ${WORKDIR}
