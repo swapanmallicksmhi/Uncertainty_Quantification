@@ -7,22 +7,22 @@ import matplotlib.pyplot as plt
 import xarray as xr
 import numpy as np
 import zarr
-from process_data import process_carra2_data, process_era5_data
+from process_data_PLOT import process_carra2_data, process_era5_data
 
 
 # Modify the input andoutput directories
-SCRPDIR = "/home/dnk8136/Uncertainty_Quantification/CREATE_TRAINING_DATA"
-TMPDIR = f"{SCRPDIR}/tmp_ERA_C"
-INPUT1 = f"/scratch/dnk8136/DDPM_DATA/CARRA2/NCFILES"
-INPUT2 = f"/scratch/dnk8136/DDPM_DATA/ERA5/"
-PLOT_OUT = f"{SCRPDIR}/../PLOTS"
-output_file = f"{SCRPDIR}/../test.zarr"
+SCRPDIR = "/home/swe4281/repository/CARRA_QC2025/Uncertainty_Quantification/CREATE_TRAINING_DATA1"
+TMPDIR = f"{SCRPDIR}/tmp_ERA_C1"
+INPUT1 = f"/lus/h2resw01/scratch/swe4281/DDPM_DATA/KESP/NCFILES"
+OUTPUT=f"/ec/res4/hpcperm/swe4281/DDPM_DATA/FINAL_2025"
+PLOT_OUT = f"{OUTPUT}/PLOTS"
 
 
 # Input Date Configuration
-DTG = "202203"
-DTSTR, DTEND = 1, 1
+DTG = "202209"
+DTSTR, DTEND = 15, 30
 YY, MM = DTG[:4], DTG[4:6]
+output_file = f"{OUTPUT}/2_{YY}{MM}_1.zarr"
 
 os.makedirs(PLOT_OUT, exist_ok=True)
 VARIABLES_PNG = ['SD', 'EnsMEAN']
@@ -50,21 +50,19 @@ FA_name = {"t2m": "CLSTEMPERATURE",
            "t950": "S051TEMPERATURE",
            "t900": "S046TEMPERATURE",
            "t700": "S033TEMPERATURE",
-           "t500": "S025TEMPERATURE",
+           "t500": "S024TEMPERATURE",
            "q950": "S051HUMI.SPECIFI",
            "q900": "S046HUMI.SPECIFI",
            "q700": "S033HUMI.SPECIFI",
-           "q500": "S025HUMI.SPECIFI",
+           "q500": "S024HUMI.SPECIFI",
            "u950": "S051WIND.U.PHYS",
            "u900": "S046WIND.U.PHYS",
            "u700": "S033WIND.U.PHYS",
-           "u500": "S025WIND.U.PHYS",
+           "u500": "S024WIND.U.PHYS",
            "v950": "S051WIND.V.PHYS",
            "v900": "S046WIND.V.PHYS",
            "v700": "S033WIND.V.PHYS",
-           "v500": "S025WIND.V.PHYS"}
-
-
+           "v500": "S024WIND.V.PHYS"}
 
 # Main Processing Loop
 for DD in range(DTSTR, DTEND+1):  # Adjust this range if needed
@@ -86,10 +84,9 @@ for DD in range(DTSTR, DTEND+1):  # Adjust this range if needed
 
         # loop over parameters
         for param in list_params:
-
+            #
             os.makedirs(TMPDIR, exist_ok=True)
             os.chdir(TMPDIR)
-            
             for mem in ens_mem:
                  mem_IN = Path(f"{INPUT1}/{YY}/{MM}/{DDN}/{HH}/mbr00{mem}/FC006")     # CARRA2ENDA
                  print(f'Processing Member {mem_IN}', flush=True)
@@ -98,13 +95,13 @@ for DD in range(DTSTR, DTEND+1):  # Adjust this range if needed
                  
             # process data
             ds_param = process_carra2_data(param, FA_name[param], timestamp)
-            # print("carra2", ds_param)
+            print("carra2", ds_param)
 
             # merge datasets
             ds_datetime = xr.merge([ds_datetime, ds_param])
 
             # process data
-            ds_param = process_era5_data(INPUT2, param, timestamp)
+            ###ds_param = process_era5_data(INPUT2, param, timestamp)
             # print("era5", ds_param)
 
             # merge datasets
