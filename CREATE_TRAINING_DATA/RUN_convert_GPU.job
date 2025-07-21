@@ -1,0 +1,15 @@
+#!/usr/bin/env bash
+#SBATCH -t 24:00:00
+#SBATCH --output=log_GPU.out
+#SBATCH --error=log_GPU.out
+#SBATCH --job-name=11GPU_CONV2ZARR
+#SBATCH --qos=ng
+#SBATCH --nodes=1
+#SBATCH --mem=80GB
+#SBATCH --gpus=1
+set -evx
+
+module load conda
+conda activate chimp
+python3 CONVERT2ZARR.py
+exit
