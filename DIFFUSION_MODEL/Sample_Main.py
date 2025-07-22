@@ -8,8 +8,8 @@ import torch.distributed as dist
 # Extend system path to import from parent and current directories
 sys.path.extend(["..", "."])
 
-from src_diffusion import dist_util, logger
-from src_diffusion.script_util import (
+from src_diffusion import diffusion_dist, logger
+from src_diffusion.diffusion_script import (
     NUM_CLASSES,
     model_and_diffusion_defaults,
     create_model_and_diffusion,
@@ -22,7 +22,7 @@ def main():
     args = create_argparser().parse_args()
 
     # Setup distributed training environment
-    dist_util.setup_dist()
+    diffusion_dist.setup_dist()
     logger.configure()
 
     logger.log("Creating model and diffusion process...")
@@ -32,9 +32,9 @@ def main():
 
     # Load the trained model
     model.load_state_dict(
-        dist_util.load_state_dict(args.model_path, map_location="cpu")
+        diffusion_dist.load_state_dict(args.model_path, map_location="cpu")
     )
-    model.to(dist_util.dev())
+    model.to(diffusion_dist.dev())
     model.eval()
 
     logger.log("Sampling started...")
