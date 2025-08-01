@@ -55,7 +55,7 @@ def load_data(
 
     if class_cond:
         # Class is determined by the prefix of the filename before the first underscore.
-        class_names = [bf.basename(path).split("_")[0] for path in all_files]
+        class_names = [bf.basename(path).split("carra2")[0] for path in all_files] # SWAPAN
         sorted_classes = {name: idx for idx, name in enumerate(sorted(set(class_names)))}
         classes = [sorted_classes[name] for name in class_names]
 

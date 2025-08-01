@@ -17,7 +17,7 @@ set -evx
 module load conda
 conda activate chimp
 #
-MODEL_FLAGS="--image_size 256 --num_channels 32 --num_res_blocks 4 --learn_sigma True"
+MODEL_FLAGS="--image_size 256 --num_channels 32 --num_res_blocks 4 --learn_sigma True --class_cond False"
 DIFFUSION_FLAGS="--diffusion_steps 4000 --noise_schedule linear"
 TRAIN_FLAGS="--lr 1e-4 --batch_size 50 --microbatch 5"
 OUTPUT='/ec/res4/scratch/'
