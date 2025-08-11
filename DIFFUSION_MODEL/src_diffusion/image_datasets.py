@@ -54,10 +54,48 @@ def load_data(
     classes = None
 
     if class_cond:
-        # Class is determined by the prefix of the filename before the first underscore.
-        class_names = [bf.basename(path).split("carra2")[0] for path in all_files] # SWAPAN
+        # Create a dictionary to map base names to carra2 files
+        carra2_files = {}
+        for path in all_files:
+            filename = os.path.basename(path)
+            if filename.endswith("_carra2.png"):
+                base_name = filename.replace("_carra2.png", "")
+                carra2_files[base_name] = path
+
+        # Filter files to only include era5 files that have matching carra2 files
+        filtered_files = []
+        class_files = []
+        for path in all_files:
+            filename = os.path.basename(path)
+            if filename.endswith("_era5.png"):  # Changed from _erra5.png to _era5.png
+                base_name = filename.replace("_era5.png", "")
+                if base_name in carra2_files:
+                    filtered_files.append(path)
+                    class_files.append(carra2_files[base_name])
+
+        if not filtered_files:
+            raise ValueError(f"No matching era5/carra2 file pairs found in {data_dir}. "
+                           f"Found {len(all_files)} total files.")
+
+        # Update all_files to only include matched pairs
+        all_files = filtered_files
+        
+        # Now create class labels based on the carra2 files
+        class_names = []
+        for path in class_files:
+            filename = os.path.basename(path)
+            # Remove the "_carra2.png" suffix
+            name = filename.rsplit("_carra2.png", 1)[0]
+            class_names.append(name)
+
+        # Map sorted unique class names to integer IDs
         sorted_classes = {name: idx for idx, name in enumerate(sorted(set(class_names)))}
         classes = [sorted_classes[name] for name in class_names]
+
+        print(f"DDPM found {len(all_files)} matched file pairs during Supervise Learing")
+        print("Example era5 files:", [os.path.basename(f) for f in all_files[:5]])
+        print("Example carra2 files:", [os.path.basename(f) for f in class_files[:5]])
+        print("Class mapping:", sorted_classes)
 
     dataset = ImageDataset(
         resolution=image_size,
@@ -113,14 +151,14 @@ class ImageDataset(Dataset):
         shard (int): Rank of the current MPI process.
         num_shards (int): Total number of MPI processes.
     """
+    #has_shown_image = False
+    has_shown_image = True
 
     def __init__(self, resolution, image_paths, classes=None, shard=0, num_shards=1):
         super().__init__()
         self.resolution = resolution
         self.local_images = image_paths[shard::num_shards]
-        self.local_classes = (
-            None if classes is None else classes[shard::num_shards]
-        )
+        self.local_classes = None if classes is None else classes[shard::num_shards]
 
     def __len__(self):
         return len(self.local_images)
@@ -142,6 +180,15 @@ class ImageDataset(Dataset):
         scale = self.resolution / min(*pil_image.size)
         new_size = tuple(round(x * scale) for x in pil_image.size)
         pil_image = pil_image.resize(new_size, resample=Image.BICUBIC)
+
+        # Display the first image once
+        if not ImageDataset.has_shown_image:
+            import matplotlib.pyplot as plt
+            plt.imshow(pil_image)
+            plt.title(f"Input image: {os.path.basename(self.local_images[idx])}")
+            plt.axis("off")
+            plt.show()
+            ImageDataset.has_shown_image = True
 
         # Convert image to numpy array and crop to square
         arr = np.array(pil_image.convert("RGB"), dtype=np.float32)

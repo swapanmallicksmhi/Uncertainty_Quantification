@@ -1,8 +1,8 @@
 #!/bin/sh
 #-------------------------------
-#SBATCH --job-name=DDPM_TRAIN
-#SBATCH --output=DDPM_TRAIN.out
-#SBATCH --error=DDPM_TRAIN.out
+#SBATCH --job-name=DDPM_Training
+#SBATCH --output=Trn_log.out
+#SBATCH --error=Trn_log.out
 #SBATCH --qos=ng
 #SBATCH --nodes=1
 #SBATCH --mem=60GB
@@ -15,12 +15,13 @@
 set -evx
 
 module load conda
-conda activate chimp
+conda activate ddenv_2025
+#conda activate chimp
 #
-MODEL_FLAGS="--image_size 256 --num_channels 32 --num_res_blocks 4 --learn_sigma True --class_cond False"
+MODEL_FLAGS="--image_size 256 --num_channels 64 --num_res_blocks 4 --learn_sigma True --class_cond True"
 DIFFUSION_FLAGS="--diffusion_steps 4000 --noise_schedule linear"
 TRAIN_FLAGS="--lr 1e-4 --batch_size 50 --microbatch 5"
-OUTPUT='/ec/res4/scratch/'
+OUTPUT='/scratch/swe4281/DDPM_DATA/DDPM_TrainingOut/OUTPUT_t2m'
 #
 mkdir -p $OUTPUT
 python3 Train_Main.py --data_dir ./INPUT_DATA  --TRAIN_OUT $OUTPUT $MODEL_FLAGS $DIFFUSION_FLAGS $TRAIN_FLAGS
