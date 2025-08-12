@@ -1,0 +1,42 @@
+#!/usr/bin/env bash
+#SBATCH -t 30:00:00
+#SBATCH --output=log.out
+#SBATCH --error=log.out
+#SBATCH --nodes=1
+#SBATCH --mem=60GB
+
+set -evx
+
+module load conda
+conda activate ddenv_2025
+
+# Input and output directories
+INPUT="/ec/res4/scratch/dnk8136/DDPM_DATA/MLDATA"
+OUTPUTALL="/ec/res4/scratch/swe4281/DDPM_DATA/MLDATA/DDPM_PLOTS_ALL"
+
+mkdir -p "${OUTPUTALL}"
+
+# Parameters
+YYYY="2022"
+VAR="['u10','v10']"
+# VAR="['t2m','u10','v10']"
+
+# Loop over months
+for MM in 01 03 04 06 09 10; do
+    echo "Processing month: ${MM}"
+    echo "Output directory: ${OUTPUTALL}"
+
+    # Ensure output directory exists
+    mkdir -p "$OUTPUTALL"
+
+    # Run the Python plotting scripts
+    python3 era5_zarrToimage.py "$YYYY" "$MM" "$VAR" "$INPUT" "$OUTPUTALL"
+    python3 carra2_zarrToimage.py "$YYYY" "$MM" "$VAR" "$INPUT" "$OUTPUTALL"
+
+    echo "Input data for ${YYYY}-${MM} is ready for DDPM model"
+done
+
+echo "All output are located in"
+echo ${OUTPUTALL}"/VAR/CROP"
+
+exit 0
