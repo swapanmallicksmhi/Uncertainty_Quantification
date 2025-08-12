@@ -100,5 +100,6 @@ flowchart TD
 
 ---
 
-## Author
+## Authors
 **Swapan Mallick, SMHI**
+**Kasper Skjold Tølløse, DMI**
