@@ -53,7 +53,7 @@ def main():
         # Add class conditioning if enabled
         if args.class_cond:
             classes = th.randint(
-                low=0, high=NUM_CLASSES, size=(args.batch_size,), device=dist_util.dev()
+                low=0, high=NUM_CLASSES, size=(args.batch_size,), device=diffusion_dist.dev()
             )
             model_kwargs["y"] = classes
 

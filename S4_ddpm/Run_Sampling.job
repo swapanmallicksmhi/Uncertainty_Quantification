@@ -15,12 +15,11 @@
 set -evx
 
 module load conda
-conda activate ddenv_2025
+conda activate chimp
 #
-for ii in 1 2; do 
+for ii in 1 2 3 4; do 
 # Define model configuration
-MODEL_FLAGS="--image_size 256 --num_channels 32 --num_res_blocks 4 --learn_sigma True"
-# Define diffusion process configuration
+MODEL_FLAGS="--image_size 256 --num_channels 64 --num_res_blocks 4 --learn_sigma True --class_cond True"
 DIFFUSION_FLAGS="--diffusion_steps 4000 --noise_schedule linear"
 # Define sampling parameters
 SAMPLE=1
