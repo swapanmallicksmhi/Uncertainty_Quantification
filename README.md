@@ -1,6 +1,13 @@
 # CARRA-2 Uncertainty Estimation
 
-This repository is for calculating the **CARRA-2 uncertainty estimation**.
+This repository focuses on the computation of uncertainty estimates, also referred to as **Uncertainty Quantification (UQ)**, for the **Copernicus Arctic Regional Reanalysis second generation (CARRA2)**. **CARRA2** constitutes a high-resolution climate data product that assimilates an extensive temporal sequence of observations into the **HARMONIE model** and the three-dimensional variational (**3D-VAR**) **data assimilation** system, thereby yielding a highly precise representation of the atmospheric state. A fundamental component of the CARRA2 reanalysis involves the estimation of potential ensemble uncertainties associated with key climate variables.
+
+The repository provides a detailed account of the installation procedure of the **AI** model called the **denoising diffusion probabilistic model (DDPM)**, a generative model on the **ECMWF ATOS** supercomputer. For the purpose of uncertainty quantification in both the **CARRA2** and **ERA5** datasets, the **DDPM** is employed within a **supervised learning** framework. In this approach, the uncertainty quantification derived from CARRA2 functions as the label, condition, or target for the model, which is trained using ERA5 data.
+
+The **DDPM** framework formalizes the forward (noising) and reverse (denoising) processes as Markov chains. As a generative model, it estimates pixel-wise probability density functions (PDFs), necessitating pixel-level information from the input data during training. The forward process incrementally introduces Gaussian noise over T discrete steps, while the reverse process involves training a U-Net architecture to iteratively predict and remove noise at each step. This reverse denoising procedure is computationally intensive, requiring all T steps (for example, 4000 steps per image). Ultimately, the DDPM generates samples representing the uncertainty in CARRA2 during the reverse process.
+
+A total of twenty variables were individually selected for model training. These comprised four surface or near-surface variables: **2-meter temperature (in kelvin), meridional and zonal wind components (in meters per second), and surface pressure (in hectopascals)**. Furthermore, **temperature (in kelvin), meridional and zonal wind components (in meters per second), and specific humidity (expressed as 10*g/kg)** were included at multiple pressure levels, namely **500 hPa, 700 hPa, 900 hPa, and 950 hPa**.
+
 
 ## Repository Structure
 
