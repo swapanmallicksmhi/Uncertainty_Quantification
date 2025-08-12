@@ -1,0 +1,15 @@
+#!/bin/bash
+#SBATCH -N1
+#SBATCH -t 48:00:00
+#SBATCH --job-name=FAtoNetCDF
+#SBATCH --error=FAtoNetCDF.log
+#SBATCH --output=FAtoNetCDF.log
+
+module load python3
+module use /perm/hlam/apps/modulefiles/lmod
+module load epygram/1.4.13
+
+#
+python3 FAtoNetCDF.py
+#
+exit

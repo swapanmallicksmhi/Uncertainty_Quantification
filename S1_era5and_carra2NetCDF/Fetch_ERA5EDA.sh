@@ -11,13 +11,14 @@ module load eclib
 module load python3
 
 export MARS_MULTITARGET_STRICT_FORMAT=1
-DDIR=/scratch/fasg/CARRA2/uncert_est
-SCRDIR=/home/fasg/CARRA2/uncert_est/mars_retrievals
+DDIR=/scratch/${HOME}/DDPM_DATA/S1_era5and_carra2NetCDF
+SCRDIR=/home/${HOME}/S1_era5and_carra2NetCDF
+#SCRDIR=/home/fasg/CARRA2/uncert_est/mars_retrievals
 
 cd $DDIR || { echo "Could cd to $DDIR" ; exit ; }
 
-DATE1=20220129
-DATE2=20220130
+DATE1=20220301
+DATE2=20220330
 
 # Make list of dates for the MARS retrieve
 DATES=""
@@ -57,7 +58,7 @@ RETRIEVE,
   LEVTYPE = SFC,
   GRID = 0.6/0.6,
   NUMBER = 0/1/2/3/4/5/6/7/8/9,
-  PARAM = 165.128/166.128/134/167,
+  PARAM = 134/167,
   PROCESS = LOCAL,
   ROTATION = 0.0/-30.0,
   STREAM = ENDA,
@@ -66,7 +67,29 @@ RETRIEVE,
   ACCURACY = 16,
   TARGET="$DDIR/ERA5_EDA_SFC_[DATE].grib"
 EOF
-#mars < mars_retrieve.dat
+
+for n in {0..9};do
+    cat >> mars_retrieve.dat <<EOF
+RETRIEVE,
+  DATE = ${DATES},
+  TIME = 00/06/12/18,
+  EXPVER = 1,
+  CLASS = EA,
+  LEVTYPE = SFC,
+  GRID = 0.6/0.6,
+  NUMBER = ${n},
+  PARAM = 165.128/166.128,
+  PROCESS = LOCAL,
+  ROTATION = 0.0/-30.0,
+  STREAM = ENDA,
+  TYPE = AN,
+  AREA = 29.3/-41.1/-38.5/36.3,
+  ACCURACY = 16,
+  TARGET="$DDIR/ERA5_EDA_SFC_[DATE].grib"
+EOF
+done
+mars < mars_retrieve.dat
+#exit
 
 GRIBFILES=$(ls -1 ERA5*grib)
 for GRB in $GRIBFILES;do
