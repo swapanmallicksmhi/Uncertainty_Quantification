@@ -102,4 +102,5 @@ flowchart TD
 
 ## Authors
 **Swapan Mallick, SMHI**;
-**Kasper Skjold Tølløse, DMI**
+**Kasper Skjold Tølløse, DMI** &
+**Per Dahlgren, MET-NOR**
