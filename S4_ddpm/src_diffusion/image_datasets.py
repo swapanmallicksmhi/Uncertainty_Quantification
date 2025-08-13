@@ -45,7 +45,7 @@ def load_data(
 
     Yields:
         (image, metadata) tuples. Images are normalized float32 NCHW arrays.
-        Metadata is a dict containing optional class labels ('y').
+        Metadata is a dict containing optional class labels.
     """
     if not data_dir:
         raise ValueError("You must specify a valid data directory.")
@@ -67,11 +67,13 @@ def load_data(
         class_files = []
         for path in all_files:
             filename = os.path.basename(path)
-            if filename.endswith("_era5.png"):  # Changed from _erra5.png to _era5.png
-                base_name = filename.replace("_era5.png", "")
-                if base_name in carra2_files:
-                    filtered_files.append(path)
-                    class_files.append(carra2_files[base_name])
+            if filename.startswith("SD_"):
+                #
+                if filename.endswith("_era5.png"):
+                    base_name = filename.replace("_era5.png", "")
+                    if base_name in carra2_files:
+                        filtered_files.append(path)
+                        class_files.append(carra2_files[base_name])
 
         if not filtered_files:
             raise ValueError(f"No matching era5/carra2 file pairs found in {data_dir}. "
@@ -92,10 +94,9 @@ def load_data(
         sorted_classes = {name: idx for idx, name in enumerate(sorted(set(class_names)))}
         classes = [sorted_classes[name] for name in class_names]
 
-        print(f"DDPM found {len(all_files)} matched file pairs during Supervise Learing")
+        print(f"DDPM found {len(all_files)} matched file pairs during Supervise Learning")
         print("Example era5 files:", [os.path.basename(f) for f in all_files[:5]])
         print("Example carra2 files:", [os.path.basename(f) for f in class_files[:5]])
-        print("Class mapping:", sorted_classes)
 
     dataset = ImageDataset(
         resolution=image_size,
@@ -125,14 +126,14 @@ def _list_image_files_recursively(data_dir: str) -> list:
         data_dir (str): Root directory.
 
     Returns:
-        list: Paths to image files (jpg, jpeg, png, gif).
+        list: Paths to image files.
     """
     results = []
     for entry in sorted(bf.listdir(data_dir)):
         full_path = bf.join(data_dir, entry)
         ext = entry.split(".")[-1].lower()
 
-        if "." in entry and ext in ["jpg", "jpeg", "png", "gif"]:
+        if "." in entry and ext in ["png"]:
             results.append(full_path)
         elif bf.isdir(full_path):
             results.extend(_list_image_files_recursively(full_path))

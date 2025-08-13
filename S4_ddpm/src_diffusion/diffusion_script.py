@@ -295,7 +295,6 @@ def args_to_dict(args, keys):
 
 def str2bool(v):
     """
-    https://stackoverflow.com/questions/15008758/parsing-boolean-values-with-argparse
     """
     if isinstance(v, bool):
         return v
