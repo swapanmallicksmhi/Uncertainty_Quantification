@@ -1,5 +1,4 @@
 """
-
 Author: Swapan Mallick
 Date : 10 March 2025
 
@@ -32,7 +31,7 @@ def model_and_diffusion_defaults():
         learn_sigma=False,
         sigma_small=False,
         class_cond=False,
-        diffusion_steps=1000,
+        diffusion_steps=4000,
         noise_schedule="linear",
         timestep_respacing="",
         use_kl=False,
@@ -126,12 +125,24 @@ def create_model(
         attention_resolutions=tuple(attention_ds),
         dropout=dropout,
         channel_mult=channel_mult,
+        conv_resample="True",
+        #conv_resample=use_conv_resample,
+        dims=2,
         num_classes=(NUM_CLASSES if class_cond else None),
         use_checkpoint=use_checkpoint,
         num_heads=num_heads,
         num_heads_upsample=num_heads_upsample,
         use_scale_shift_norm=use_scale_shift_norm,
+        cond_channels=3,          # enable conditioning support (ERA5 maps)
+        cond_attn_heads=4,        # number of cross-attention heads
     )
+    #    channel_mult=channel_mult,
+    #    num_classes=(NUM_CLASSES if class_cond else None),
+    #    use_checkpoint=use_checkpoint,
+    #    num_heads=num_heads,
+    #    num_heads_upsample=num_heads_upsample,
+    #    use_scale_shift_norm=use_scale_shift_norm,
+    #)
 
 
 def sr_model_and_diffusion_defaults():
@@ -238,7 +249,7 @@ def sr_create_model(
 
 def create_diffusion_gaussian(
     *,
-    steps=1000,
+    steps=4000,
     learn_sigma=False,
     sigma_small=False,
     noise_schedule="linear",

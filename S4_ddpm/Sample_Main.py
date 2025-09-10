@@ -1,133 +1,195 @@
-#-
-#Author: Swapan Mallick
-#Date : 9 March 2025
-#-
+####!/usr/bin/env python3
+"""
 
+Main program for Sampling.
+Author: Swapan Mallick
+Date : 9 March 2025
+Sampler for DDPM 0-h forecast models.
+
+"""
 import argparse
 import os
 import sys
+import traceback
+import torch
 import numpy as np
-import torch as th
-import torch.distributed as dist
+from PIL import Image
 
-# Extend system path to import from parent and current directories
-sys.path.extend(["..", "."])
+from src_diffusion.diffusion_dist import create_model_and_diffusion, model_and_diffusion_defaults
 
-from src_diffusion import diffusion_dist, logger
-from src_diffusion.diffusion_script import (
-    NUM_CLASSES,
-    model_and_diffusion_defaults,
-    create_model_and_diffusion,
-    add_dict_to_argparser,
-    args_to_dict,
-)
+def str2bool(v):
+    if v is None:
+        return None
+    if isinstance(v, bool):
+        return v
+    if v.lower() in ("yes", "true", "t", "y", "1"):
+        return True
+    if v.lower() in ("no", "false", "f", "n", "0"):
+        return False
+    raise argparse.ArgumentTypeError("Boolean value expected.")
 
 
-def main():
-    args = create_argparser().parse_args()
+def save_images(batch_tensor, out_dir, prefix="sample", save_size=None):
+    """
+    Save images from batch_tensor to out_dir.
+    batch_tensor: torch.Tensor (B, C, H, W) in [-1, 1]
+    save_size: int or None, if set images are resized to (save_size, save_size)
+    """
+    batch_tensor = batch_tensor.clamp(-1, 1)
+    imgs = ((batch_tensor.cpu().permute(0, 2, 3, 1).numpy() + 1.0) * 127.5).astype(np.uint8)
+    for i, arr in enumerate(imgs):
+        im = Image.fromarray(arr)
+        if save_size is not None and save_size != arr.shape[0]:
+            im = im.resize((save_size, save_size), resample=Image.BICUBIC)
+        im.save(os.path.join(out_dir, f"{prefix}_{i}.png"))
 
-    # Setup distributed training environment
-    diffusion_dist.setup_dist()
-    logger.configure()
 
-    logger.log("Creating model and diffusion process...")
-    model, diffusion = create_model_and_diffusion(
-        **args_to_dict(args, model_and_diffusion_defaults().keys())
-    )
+def load_checkpoint(model, model_path):
+    """
+    Load checkpoint into model. Handles common container forms and
+    returns True on success. On failure prints helpful diagnostics.
+    """
+    # Try torch.load with weights_only if available (suppresses future warning)
+    try:
+        state = torch.load(model_path, map_location="cpu", weights_only=True)
+    except TypeError:
+        # older PyTorch doesn't have weights_only
+        state = torch.load(model_path, map_location="cpu")
+    except Exception:
+        print("Failed to load checkpoint. Traceback:")
+        traceback.print_exc()
+        return False
 
-    # Load the trained model
-    model.load_state_dict(
-        diffusion_dist.load_state_dict(args.model_path, map_location="cpu")
-    )
-    model.to(diffusion_dist.dev())
+    # If the checkpoint is a dict containing 'state_dict' or 'model' etc., try to find it
+    if isinstance(state, dict):
+        candidate_keys = ["state_dict", "model_state_dict", "model", "state"]
+        found = None
+        for k in candidate_keys:
+            if k in state:
+                found = k
+                break
+        if found:
+            print(f"[INFO] Found top-level key '{found}' in checkpoint; using that sub-dict.")
+            state = state[found]
+
+    # state should now be a mapping name -> tensor (a state_dict)
+    if not isinstance(state, dict):
+        print("Checkpoint does not contain a state_dict (found type {}).".format(type(state)))
+        return False
+
+    # Try to load
+    try:
+        model.load_state_dict(state)
+        return True
+    except RuntimeError as e:
+        # Provide detailed mismatch diagnostics
+        print("RuntimeError while loading state_dict (likely architecture mismatch).")
+        print(e)
+        return False
+    except Exception:
+        print("Unexpected exception when loading checkpoint:")
+        traceback.print_exc()
+        return False
+
+
+def build_model_from_args(args):
+    defaults = model_and_diffusion_defaults()
+
+    override_keys = [
+        "image_size", "num_channels", "num_res_blocks", "num_heads",
+        "attention_resolutions", "dropout", "learn_sigma", "sigma_small",
+        "class_cond", "diffusion_steps", "noise_schedule", "timestep_respacing",
+        "use_kl", "predict_xstart", "rescale_timesteps", "rescale_learned_sigmas",
+        "use_checkpoint", "use_scale_shift_norm"
+    ]
+    for key in override_keys:
+        val = getattr(args, key, None)
+        if val is not None:
+            # convert boolean-like strings
+            if isinstance(defaults.get(key, None), bool):
+                defaults[key] = str2bool(val) if isinstance(val, str) else val
+            else:
+                defaults[key] = val
+
+    # attention_resolutions might be passed as string "16,8"
+    if isinstance(defaults.get("attention_resolutions", None), str):
+        defaults["attention_resolutions"] = defaults["attention_resolutions"]
+
+    print("Model/diffusion kwargs:", defaults)
+    model, diffusion = create_model_and_diffusion(**defaults)
+    return model, diffusion
+
+
+def sample_main(args):
+    device = args.device if args.device else ("cuda" if torch.cuda.is_available() else "cpu")
+    os.makedirs(args.SAMPLE_OUT, exist_ok=True)
+
+    # Build model with provided overrides
+    model, diffusion = build_model_from_args(args)
+
+    # Load checkpoint into model
+    CK_OK = load_checkpoint(model, args.model_path)
+    if not CK_OK:
+        print("Could not load the checkpoint into the model. Aborting.")
+        sys.exit(2)
+
+    # Move model to device
+    model.to(device)
     model.eval()
 
-    logger.log("Sampling started...")
-    all_images = []
-    all_labels = []
+    # sampling loop: generate num_samples images in batches
+    n_done = 0
+    rng = np.random.RandomState(args.seed) if args.seed is not None else np.random
 
-    # Generate samples until the desired number is reached
-    while len(all_images) * args.batch_size < args.num_samples:
-        model_kwargs = {}
+    while n_done < args.num_samples:
+        this_batch = min(args.batch_size, args.num_samples - n_done)
+        shape = (this_batch, 3, args.image_size, args.image_size)
+        print(f"[INFO] Sampling batch of {this_batch}, target total {args.num_samples}")
 
-        # Add class conditioning if enabled
-        if args.class_cond:
-            classes = th.randint(
-                low=0, high=NUM_CLASSES, size=(args.batch_size,), device=diffusion_dist.dev()
-            )
-            model_kwargs["y"] = classes
+        with torch.no_grad():
+            # sampling uses diffusion object's sampling method; this assumes diffusion has p_sample_loop
+            samples = diffusion.p_sample_loop(model, shape, device=device)
 
-        # Choose sampling method
-        sample_fn = (
-            diffusion.p_sample_loop if not args.use_ddim else diffusion.ddim_sample_loop
-        )
+        save_images(samples, args.SAMPLE_OUT, prefix=f"sample_{n_done}", save_size=args.save_size)
+        n_done += this_batch
 
-        # Generate samples
-        sample = sample_fn(
-            model,
-            (args.batch_size, 3, args.image_size, args.image_size),
-            clip_denoised=args.clip_denoised,
-            model_kwargs=model_kwargs,
-        )
-
-        # Post-process the sample: scale to [0, 255] and convert to HWC format
-        sample = ((sample + 1) * 127.5).clamp(0, 255).to(th.uint8)
-        sample = sample.permute(0, 2, 3, 1).contiguous()
-
-        # Gather samples from all distributed processes
-        gathered_samples = [th.zeros_like(sample) for _ in range(dist.get_world_size())]
-        dist.all_gather(gathered_samples, sample)
-        all_images.extend([s.cpu().numpy() for s in gathered_samples])
-
-        # Gather class labels if class conditioning is used
-        if args.class_cond:
-            gathered_labels = [
-                th.zeros_like(classes) for _ in range(dist.get_world_size())
-            ]
-            dist.all_gather(gathered_labels, classes)
-            all_labels.extend([l.cpu().numpy() for l in gathered_labels])
-
-        logger.log(f"Created {len(all_images) * args.batch_size} samples")
-
-    # Combine samples and trim to the exact number requested
-    arr = np.concatenate(all_images, axis=0)[:args.num_samples]
-
-    # Combine and trim labels if present
-    if args.class_cond:
-        label_arr = np.concatenate(all_labels, axis=0)[:args.num_samples]
-
-    # Save only from the main process (rank 0)
-    if dist.get_rank() == 0:
-        out_dir = args.SAMPLE_OUT
-        shape_str = "x".join(map(str, arr.shape))
-        out_path = os.path.join(out_dir, f"samples_{shape_str}.npz")
-        print('out_path ==', out_path)
-
-        logger.log(f"Saving to {out_path}")
-        if args.class_cond:
-            np.savez(out_path, arr, label_arr)
-        else:
-            np.savez(out_path, arr)
-
-    # Synchronize all processes before exiting
-    dist.barrier()
-    logger.log("Sampling complete")
-
-
-def create_argparser():
-    defaults = dict(
-        clip_denoised=True,
-        num_samples=100,  # Default, can be overridden via CLI
-        batch_size=16,      # Default, can be overridden via CLI
-        use_ddim=True,
-        model_path="",
-        SAMPLE_OUT="./samples",
-    )
-    defaults.update(model_and_diffusion_defaults())
-    parser = argparse.ArgumentParser()
-    add_dict_to_argparser(parser, defaults)
-    return parser
+    print("Sampling done. Saved samples to:", args.SAMPLE_OUT)
 
 
 if __name__ == "__main__":
-    main()
+    parser = argparse.ArgumentParser()
+    parser.add_argument("--model_path", required=True)
+    parser.add_argument("--SAMPLE_OUT", required=True)
+    parser.add_argument("--image_size", type=int, default=None, help="Model image size")
+    parser.add_argument("--save_size", type=int, default=None, help="Save images at this resolution (upscaled)")
+    parser.add_argument("--num_samples", type=int, default=10)
+    parser.add_argument("--batch_size", type=int, default=4)
+    parser.add_argument("--device", type=str, default=None)
+    parser.add_argument("--seed", type=int, default=None)
+
+    # Model / diffusion overrides (SM)
+    parser.add_argument("--num_channels", type=int, default=None)
+    parser.add_argument("--num_res_blocks", type=int, default=None)
+    parser.add_argument("--num_heads", type=int, default=None)
+    parser.add_argument("--attention_resolutions", type=str, default=None)
+    parser.add_argument("--dropout", type=float, default=None)
+    parser.add_argument("--learn_sigma", type=str, default=None)
+    parser.add_argument("--sigma_small", type=str, default=None)
+    parser.add_argument("--class_cond", type=str, default=None)
+    parser.add_argument("--diffusion_steps", type=int, default=None)
+    parser.add_argument("--noise_schedule", type=str, default=None)
+    parser.add_argument("--timestep_respacing", type=str, default=None)
+    parser.add_argument("--use_kl", type=str, default=None)
+    parser.add_argument("--predict_xstart", type=str, default=None)
+    parser.add_argument("--rescale_timesteps", type=str, default=None)
+    parser.add_argument("--rescale_learned_sigmas", type=str, default=None)
+    parser.add_argument("--use_checkpoint", type=str, default=None)
+    parser.add_argument("--use_scale_shift_norm", type=str, default=None)
+
+    args = parser.parse_args()
+
+    # If image_size not passed, fall back to default from model defaults
+    if args.image_size is None:
+        args.image_size = model_and_diffusion_defaults().get("image_size", 256)
+
+    sample_main(args)

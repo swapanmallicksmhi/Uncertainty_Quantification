@@ -1,0 +1,63 @@
+#!/bin/bash
+#-------------------------------
+#SBATCH --job-name=FCDDPM_Eval
+#SBATCH --output=FC_eval_log.out
+#SBATCH --error=FC_eval_log.out
+#SBATCH --qos=ng
+#SBATCH --nodes=1
+#SBATCH --mem=60GB
+#SBATCH --gpus=4
+#SBATCH --time=24:00:00
+#-------------------------------
+
+# Load modules and activate environment
+set -evx
+module load conda
+conda activate ddenv_v2
+
+# Enable CUDA-aware MPI (if needed)
+export OMPI_MCA_opal_cuda_support=true
+export OMPI_MCA_pml=ucx
+export UCX_MEMTYPE_CACHE=n
+
+# ---------------------------
+# Define paths
+# ---------------------------
+VAR="sp"
+TYPE="FC_0HR"
+SCR="/home/swe4281/repository/CARRA_QC2025/Uncertainty_Quantification/S4_ddpm_FC00"
+CHECKPOINT_DIR="/ec/res4/hpcperm/swe4281/DDPM_CARRA2_FINAL/DDPM_MODEL_SEP25/${VAR}/${TYPE}"
+ERA5_DIR="${SCR}/ERA5_SP"
+CARRA2_DIR="${SCR}/CARRA2_SP"
+OUTPUT_DIR="${CHECKPOINT_DIR}/OUT_BEST_CHECK_ME"
+mkdir -p ${OUTPUT_DIR}
+#CHECKPOINT_DIR="${SCR}/MODELCHECK1"
+#CHECKPOINT_DIR="/ec/res4/hpcperm/swe4281/DDPM_CARRA2_FINAL/DDPM_MODEL_SEP25/${VAR}/checkpoints"
+#ERA5_DIR="/scratch/swe4281/DDPM_DATA/MLDATA/DDPM_PLOTS_ALL_V1/${VAR}/ERA5"
+#CARRA2_DIR="/scratch/swe4281/DDPM_DATA/MLDATA/DDPM_PLOTS_ALL_V1/${VAR}/CARRA2"
+#OUTPUT_DIR="/ec/res4/hpcperm/swe4281/DDPM_CARRA2_FINAL/DDPM_MODEL_SEP25/${VAR}/BEST_SAMPLES"
+
+# ---------------------------
+# Evaluation Flags
+# ---------------------------
+IMAGE_SIZE=256
+BATCH_SIZE=1
+NUM_SAMPLES=10
+WORLD_SIZE=4
+
+# ---------------------------
+# Run Multi-GPU Evaluation
+# ---------------------------
+#
+srun --mpi=pmi2 torchrun --nproc_per_node=4 evaluate.py \
+    --checkpoint_dir $CHECKPOINT_DIR \
+    --era5_dir $ERA5_DIR \
+    --carra2_dir $CARRA2_DIR \
+    --output_dir $OUTPUT_DIR \
+    --image_size $IMAGE_SIZE \
+    --batch_size $BATCH_SIZE \
+    --num_samples $NUM_SAMPLES \
+    --cond_key "" \
+    --num_channels 64 --num_res_blocks 2 --num_heads 4 --attention_resolutions "16,8" --diffusion_steps 4000
+
+exit 0
