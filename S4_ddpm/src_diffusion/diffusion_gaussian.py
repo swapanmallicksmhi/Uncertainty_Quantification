@@ -20,7 +20,7 @@ from .losses import normal_kl, discretized_gaussian_log_likelihood
 
 
 def get_named_beta_schedule(schedule_name, num_diffusion_timesteps):
-    #print('DIFF_MM1',schedule_name)
+    print('DIFF_MM schedule_name',schedule_name)
     if schedule_name == "linear":
         # Linear schedule from Ho et al, extended to work for any number of
         # diffusion steps.

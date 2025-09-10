@@ -1,5 +1,5 @@
-#!/bin/sh
-#-------------------------------
+#!/bin/bash
+#---------------------------------------
 #SBATCH --job-name=SAMPLE
 #SBATCH --output=SAMPLE.out
 #SBATCH --error=SAMPLE.out
@@ -7,33 +7,78 @@
 #SBATCH --nodes=1
 #SBATCH --mem=60GB
 #SBATCH --gpus=4
-#SBATCH --time=6:00:00
-#
-#-------------------------------
-# commands to be executed
-#-------------------------------
+#SBATCH --time=24:00:00
+#---------------------------------------
+
 set -evx
 
+# Load environment
 module load conda
 conda activate chimp
-#
-for ii in 1 2 3 4; do 
-# Define model configuration
-MODEL_FLAGS="--image_size 256 --num_channels 64 --num_res_blocks 4 --learn_sigma True --class_cond True"
-DIFFUSION_FLAGS="--diffusion_steps 4000 --noise_schedule linear"
-# Define sampling parameters
-SAMPLE=1
-BATCH_SIZE=50
-OUTPUT=SAMPLEOUT_N${ii}
-mkdir -p ${OUTPUT}
-# Run the sampling script
-python3 Sample_Main.py \
-  --num_samples $SAMPLE \
-  --batch_size $BATCH_SIZE \
-  --model_path ./MODEL/model${ii}.pt \
-  --SAMPLE_OUT $OUTPUT \
-  $MODEL_FLAGS \
-  $DIFFUSION_FLAGS
-#
+
+# Try to reduce cuda fragmentation (optional)
+export PYTORCH_CUDA_ALLOC_CONF=expandable_segments:True
+
+# --------------------------
+# User configuration
+# --------------------------
+VAR="sp"
+TYPE="FC_0HR"
+MODEL_SRC="/ec/res4/hpcperm/swe4281/DDPM_CARRA2_FINAL/DDPM_MODEL_SEP25/${VAR}/${TYPE}"
+OUTPUT="/ec/res4/hpcperm/swe4281/DDPM_CARRA2_FINAL/SAMPLE_FC"
+MODEL_DIR="./MODEL_${VAR}_${TYPE}"
+mkdir -p "$MODEL_DIR"
+
+# Sampling params
+SAMPLE=10
+BATCH_SIZE=4
+IMAGE_SIZE=256
+OUTIMAGE_SIZE=1024
+DEVICE="cuda"
+
+# Model hyperparameters (SM must match what was used during training)
+NUM_CHANNELS=64
+NUM_RES_BLOCKS=2
+NUM_HEADS=4
+ATTENTION_RES="16,8"
+DIFFUSION_STEPS=4000
+
+# --------------------------
+# Loop over specific checkpoints
+# --------------------------
+#CHECKPOINTS=(20)
+CHECKPOINTS=(10 12 14 16 18 20)
+
+for ii in "${CHECKPOINTS[@]}"; do
+    SRC_CHECKPOINT="${MODEL_SRC}/model0${ii}000.pt"
+    if [ ! -f "${SRC_CHECKPOINT}" ]; then
+        echo "Warning: source checkpoint not found: ${SRC_CHECKPOINT}, skipping."
+        continue
+    fi
+
+    OUT_DIR="${OUTPUT}/${VAR}/SAMPLE_N${ii}000_${VAR}_${TYPE}"
+    mkdir -p "${OUT_DIR}"
+
+    MODEL_FILE="model${ii}.pt"
+    ln -sf "${SRC_CHECKPOINT}" "${MODEL_DIR}/${MODEL_FILE}"
+    MODEL_PATH="${MODEL_DIR}/${MODEL_FILE}"
+
+    python3 Sample_Main.py \
+        --model_path "${MODEL_PATH}" \
+        --SAMPLE_OUT "${OUT_DIR}" \
+        --image_size "${IMAGE_SIZE}" \
+        --save_size  "${OUTIMAGE_SIZE}" \
+        --num_samples "${SAMPLE}" \
+        --batch_size "${BATCH_SIZE}" \
+        --device "${DEVICE}" \
+        --num_channels "${NUM_CHANNELS}" \
+        --num_res_blocks "${NUM_RES_BLOCKS}" \
+        --num_heads "${NUM_HEADS}" \
+        --attention_resolutions "${ATTENTION_RES}" \
+        --diffusion_steps "${DIFFUSION_STEPS}"
 done
-exit
+#
+# remove MODEL_PATH
+rm -rf ${MODEL_DIR} 
+
+exit 0

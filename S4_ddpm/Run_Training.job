@@ -1,0 +1,38 @@
+#!/bin/sh
+#-------------------------------
+#SBATCH --job-name=1DDPM_Training
+#SBATCH --output=1log.out
+#SBATCH --error=1log.out
+#SBATCH --qos=ng
+#SBATCH --nodes=1
+#SBATCH --mem=60GB
+#SBATCH --gpus=4
+#SBATCH --time=36:00:00
+#-------------------------------
+
+set -evx
+module load conda
+conda activate ddenv_v2
+
+# CUDA-aware MPI & fragmentation mitigation
+export OMPI_MCA_opal_cuda_support=true
+export OMPI_MCA_pml=ucx
+export UCX_MEMTYPE_CACHE=n
+export PYTORCH_CUDA_ALLOC_CONF=expandable_segments:True
+
+VAR="sp"
+TYPE="FC_0HR"
+INPUT="/scratch/swe4281/DDPM_DATA/MLDATA/DDPM_PLOTS_ALL_V1/${VAR}/CROP"
+OUTPUT="/ec/res4/hpcperm/swe4281/DDPM_CARRA2_FINAL/DDPM_MODEL_SEP25/${VAR}/${TYPE}"
+
+# Lowered batch + microbatch + enable fp16
+MODEL_FLAGS="--image_size 256 --num_channels 64"   # reduce model size if needed
+TOTALSTEP="--steps 20000"
+TRAIN_FLAGS="--lr 1e-4 --batch_size 8 --microbatch 4 --use_fp16 True"
+
+mkdir -p $OUTPUT
+
+# Launch
+srun --mpi=pmi2 torchrun --nproc_per_node=4 Train_Main.py \
+    --data_dir $INPUT --TRAIN_OUT $OUTPUT \
+      $MODEL_FLAGS $TOTALSTEP $TRAIN_FLAGS
