@@ -1,0 +1,162 @@
+#!/bin/bash
+#-------------------------------
+#SBATCH --job-name=HQ_Evalulation
+#SBATCH --output=HQ_Evalulation.log
+#SBATCH --error=HQ_Evalulation.log
+#SBATCH --qos=ng
+#SBATCH --nodes=1
+#SBATCH --mem=60GB
+#SBATCH --gpus=4
+#SBATCH --time=12:00:00 
+#-------------------------------
+
+# Load modules and activate environment
+set -evx
+module load conda
+conda activate ddenv_v2
+
+# Enable CUDA-aware MPI
+export OMPI_MCA_opal_cuda_support=true
+export OMPI_MCA_pml=ucx
+export UCX_MEMTYPE_CACHE=n
+
+# ---------------------------
+# Define paths
+# ---------------------------
+VAR="t2m" # Variable  Name
+SCR="${PWD}"
+MODEL_SRC="${SCRATCH}/DDPM/${VAR}"
+CARRA_DYN="${SCRATCH}/DDPM/DATA/INPUT_TEST/${VAR}"
+ERRA_ENS="${SCRATCH}/DDPM/DATA/INPUT_TEST/${VAR}"
+BASE_OUTPUT="${SCRATCH}/DDPM/HQ_SAMPLE/${VAR}"  # Changed output directory
+
+#--Date for validation---
+DATE_ARRAY=(2022011400)
+#
+CHECKPOINTS=(12 14 16 18 20)
+
+# ---------------------------
+# Evaluation Flags - OPTIMIZED FOR QUALITY
+# ---------------------------
+IMAGE_SIZE=256
+BATCH_SIZE=1          
+NUM_SAMPLES=30        
+NUM_SAMPLES_SD=5      
+WORLD_SIZE=4
+
+export NCCL_DEBUG=INFO
+export TORCH_DISTRIBUTED_DEBUG=DETAIL
+
+# Loop through each date
+for YYMMDDHH in "${DATE_ARRAY[@]}"; do
+    echo "=================================================="
+    echo "Processing date: $YYMMDDHH with NUM_SAMPLES=$NUM_SAMPLES"
+    echo "=================================================="
+    
+    # Create date-specific temporary and output directories
+    TMP="${SCR}/tmp_${VAR}_${YYMMDDHH}"
+    ERA5_SD="${TMP}/ERA5_SD"
+    ERA5_DYN="${TMP}/ERA5_DYN"
+    CARRA2_SD="${TMP}/CARRA_SD"
+    CARRA2_DYN="${TMP}/CARRA_DYN"
+    CHECKPOINT_DIR="${TMP}/${VAR}"
+    
+    # Create date-specific output directories
+    OUTPUT_SD="${BASE_OUTPUT}/${YYMMDDHH}"
+    OUTPUT_DYN="${OUTPUT_SD}/FIELD"
+    
+    # Clean up and create directories
+    rm -rf ${TMP}
+    mkdir -p ${TMP}
+    mkdir -p ${ERA5_SD}
+    mkdir -p ${ERA5_DYN}
+    mkdir -p ${CARRA2_SD}
+    mkdir -p ${CARRA2_DYN}
+    mkdir -p ${CHECKPOINT_DIR}
+    mkdir -p ${OUTPUT_SD}
+    mkdir -p ${OUTPUT_DYN}
+    
+    # Link model checkpoints
+    for ii in "${CHECKPOINTS[@]}"; do
+        SRC_CHECKPOINT="${MODEL_SRC}/model0${ii}000.pt"
+        if [ ! -f "${SRC_CHECKPOINT}" ]; then
+            echo "Warning: source checkpoint not found: ${SRC_CHECKPOINT}, skipping."
+            continue
+        fi
+        ln -sf "${SRC_CHECKPOINT}" "${CHECKPOINT_DIR}"
+    done
+    
+    # Copy date-specific files
+    echo "Copying data files for date: $YYMMDDHH"
+    cp -rf ${ERRA_ENS}/SD_${VAR}_${YYMMDDHH}_era5.png ${ERA5_SD}/
+    cp -rf ${ERRA_ENS}/EnsMEAN_${VAR}_${YYMMDDHH}_era5.png ${ERA5_DYN}/
+    cp -rf ${CARRA_DYN}/hres_${VAR}_${YYMMDDHH}_carra2.png ${CARRA2_DYN}/
+    cp -rf ${ERRA_ENS}/SD_${VAR}_${YYMMDDHH}_carra2.png ${CARRA2_SD}/
+    
+    # 
+    echo "Verifying copied files:"
+    ls -la ${ERA5_SD}/
+    ls -la ${ERA5_DYN}/
+    ls -la ${CARRA2_DYN}/
+    ls -la ${CARRA2_SD}/
+    
+    # 
+    echo "Starting first torchrun evaluation for date: $YYMMDDHH"
+    torchrun --nproc_per_node=4 evaluate.py \
+        --checkpoint_dir $CHECKPOINT_DIR \
+        --era5_dir $ERA5_SD \
+        --carra2_dir $CARRA2_DYN \
+        --output_dir $OUTPUT_SD  \
+        --image_size $IMAGE_SIZE \
+        --batch_size $BATCH_SIZE \
+        --num_samples $NUM_SAMPLES_SD \
+        --cond_key "" \
+        --num_channels 64 --num_res_blocks 2 --num_heads 4 --attention_resolutions "16,8" --diffusion_steps 4000
+    
+    # First torchrun command
+    FIRST_EXIT=$?
+    if [ $FIRST_EXIT -ne 0 ]; then
+        echo "First torchrun command failed for date $YYMMDDHH with exit code: $FIRST_EXIT"
+        echo "Skipping to next date..."
+        continue
+    fi
+    
+    echo "First torchrun completed successfully for date: $YYMMDDHH"
+    echo "Starting second torchrun..."
+    
+    # Second torchrun command
+    torchrun --nproc_per_node=4 evaluate_FIELD.py  \
+        --checkpoint_dir $CHECKPOINT_DIR \
+        --era5_dir $ERA5_DYN \
+        --carra2_dir $CARRA2_DYN \
+        --output_dir $OUTPUT_DYN \
+        --image_size $IMAGE_SIZE \
+        --batch_size $BATCH_SIZE \
+        --num_samples $NUM_SAMPLES \
+        --cond_key "" \
+        --num_channels 64 --num_res_blocks 2 --num_heads 4 --attention_resolutions "16,8" --diffusion_steps 4000
+    
+    # Check exit status of second command
+    SECOND_EXIT=$?
+    if [ $SECOND_EXIT -ne 0 ]; then
+        echo "Second torchrun command failed for date $YYMMDDHH with exit code: $SECOND_EXIT"
+        echo "Continuing to next date..."
+        continue
+    fi
+    
+    echo "Both torchrun commands completed successfully for date: $YYMMDDHH"
+    echo "Output saved to: $OUTPUT_SD"
+    
+    # Clean up temporary files for this date
+     rm -rf ${TMP}
+    
+    echo "=================================================="
+    echo "Completed processing date: $YYMMDDHH"
+    echo "Output saved to: $OUTPUT_DYN"
+    echo "=================================================="
+    echo ""
+    
+done
+
+echo "All dates processed successfully with high-quality settings!"
+exit 0

@@ -1,8 +1,8 @@
 #!/bin/sh
 #-------------------------------
-#SBATCH --job-name=1DDPM_Training
-#SBATCH --output=1log.out
-#SBATCH --error=1log.out
+#SBATCH --job-name=DDPM_TRAIN
+#SBATCH --output=log.out
+#SBATCH --error=log.out
 #SBATCH --qos=ng
 #SBATCH --nodes=1
 #SBATCH --mem=60GB
@@ -20,10 +20,9 @@ export OMPI_MCA_pml=ucx
 export UCX_MEMTYPE_CACHE=n
 export PYTORCH_CUDA_ALLOC_CONF=expandable_segments:True
 
-VAR="sp"
-TYPE="FC_0HR"
-INPUT="/scratch/swe4281/DDPM_DATA/MLDATA/DDPM_PLOTS_ALL_V1/${VAR}/CROP"
-OUTPUT="/ec/res4/hpcperm/swe4281/DDPM_CARRA2_FINAL/DDPM_MODEL_SEP25/${VAR}/${TYPE}"
+VAR="t2m"
+INPUT="${SCRATCH}/DDPM/DATA/INPUT_TRAIN/${VAR}"
+OUTPUT="${SCRATCH}/DDPM/MODEL/${VAR}"
 
 # Lowered batch + microbatch + enable fp16
 MODEL_FLAGS="--image_size 256 --num_channels 64"   # reduce model size if needed
