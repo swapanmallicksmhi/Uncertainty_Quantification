@@ -1,0 +1,32 @@
+#!/usr/bin/env bash
+#SBATCH --output=netCDFtoZARR.out
+#SBATCH --error=netCDFtoZARR.out
+#SBATCH --job-name=netCDFtoZARR
+#SBATCH --qos=nf
+#SBATCH --time=4:00:00
+
+set -evx
+
+module load conda
+conda activate ddenv_2025
+
+# Define your variables
+#params_list="$1"
+#DTG="$2"
+#DTSTR="$3"
+#DTEND="$4"
+#DATASET="$5"
+
+# # Define your variables
+params_list="sp,t2m"
+# # params_list="list_examples.txt"
+# # params_list="list_params_all.txt"
+DTG="202201"
+DTSTR=5
+DTEND=30
+#DATASET="CARRA2"
+DATASET="ERA5"
+OUTPUT="/scratch/swe4281/DDPM_DATA/MLDATA"
+mkdir -p ${OUTPUT}
+# run data conversion
+python3 CONVERT2ZARR_$DATASET.py "$params_list" "$DTG" "$DTSTR" "$DTEND" "$OUTPUT"

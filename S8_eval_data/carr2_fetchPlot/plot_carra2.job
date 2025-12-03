@@ -1,0 +1,24 @@
+#!/usr/bin/env bash
+##SBATCH --output=dyncarr2.out
+##SBATCH --error=dyncarr2.out
+##SBATCH --job-name=dyncarr2
+##SBATCH --qos=nf
+##SBATCH --time=24:00:00
+
+#set -evx
+
+module load conda
+conda activate chimp
+
+# Define your variables
+params_list="t2m"
+#params_list="sp,t2m,u10,v10"
+DTG="201901"
+DTSTR=1
+DTEND=10
+INPUT="/scratch/swe4281/DDPM_DATA/CARR2DYN/DATA_JAN19"  # Change here
+OUTPUT="${INPUT}/PLOTS"
+mkdir -p ${OUTPUT}
+echo ${OUTPUT}
+# run data conversion
+python3 plot_carra2.py  "$params_list" "$DTG" "$DTSTR" "$DTEND" "$INPUT" "$OUTPUT"
