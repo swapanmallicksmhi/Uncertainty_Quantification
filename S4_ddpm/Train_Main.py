@@ -1,16 +1,72 @@
 #!/usr/bin/env python3
 """
-Main program for training diffusion models on image data.
-For Uncetainty Quantification Over the CARRA2 domain
+===========================================================
+ Program Information
+===========================================================
+ Title       : Diffusion Model Training Script
+ Description : 
+     Main driver program for training diffusion models on 
+     image datasets with Uncertainty Quantification (UQ) 
+     over the CARRA2 domain. The script orchestrates the 
+     model creation, data loading, and iterative training 
+     process, while supporting distributed training setups 
+     (via torchrun) and logging of outputs.
 
-Author: Swapan Mallick
-Date : 9 March 2025
+ Author      : Swapan Mallick
+ Date        : 9 March 2025
+ Framework   : PyTorch
 
-Key concept:
-------------
-- ema_rate:
-    Exponential Moving Average (EMA) rate is used to maintain a smoothed copy of model weights.
-    This stabilizes training by reducing noise and helps with better generalization.
+-----------------------------------------------------------
+ Key Features:
+-----------------------------------------------------------
+ 1. Argument Parsing
+    - Dynamically builds command-line arguments based on 
+      model/diffusion defaults and user-specified parameters.
+    - Supports flexible overrides for device, learning rate, 
+      steps, microbatch size, etc.
+
+ 2. Device Setup
+    - Automatically configures GPU device(s) if CUDA is 
+      available.
+    - Supports torchrun-based distributed training via 
+      LOCAL_RANK environment variable.
+
+ 3. Model & Diffusion Process
+    - Uses factory method to create both the model and 
+      associated diffusion process with appropriate defaults.
+    - Supports Exponential Moving Average (EMA) rate for 
+      stabilized training (commented in training loop).
+
+ 4. Data Loading
+    - Loads image datasets with configurable directory, 
+      image size, and batch size.
+    - Provides backward compatibility for legacy dataset 
+      loading signatures.
+
+ 5. Training Loop
+    - Implements training using `TrainLoop`, which manages:
+        * Forward/backward passes
+        * Optimizer steps
+        * Periodic checkpointing
+        * Logging and monitoring
+    - Configurable learning rate, step count, save intervals, 
+      and mixed precision (fp16) options.
+
+-----------------------------------------------------------
+ Command-Line Arguments (examples):
+-----------------------------------------------------------
+  --data_dir        : Path to dataset directory
+  --TRAIN_OUT       : Output directory for logs and checkpoints
+  --image_size      : Resolution of training images (default: 64)
+  --batch_size      : Batch size for training (default: 1)
+  --lr              : Learning rate (default: 1e-4)
+  --steps           : Total training steps (default: 20000)
+  --save_interval   : Steps between saving checkpoints
+  --use_fp16        : Enable mixed precision training
+  --device          : Explicit device string (e.g., 'cuda:0')
+  --local_rank      : Rank for distributed training (torchrun)
+
+===========================================================
 """
 
 import argparse
@@ -23,21 +79,6 @@ from src_diffusion.diffusion_dist import create_model_and_diffusion, model_and_d
 from src_diffusion.image_datasets import load_data
 from src_diffusion.diffusion_train import TrainLoop
 from src_diffusion import logger
-## Add the project root and current directory to path to allow imports
-#sys.path.append("..")
-#sys.path.append(".")
-
-# Import custom modules from the diffusion training framework
-#from src_diffusion import diffusion_dist, logger
-#from src_diffusion.image_datasets import load_data
-#from src_diffusion.resample import create_named_schedule_sampler
-#from src_diffusion.diffusion_script import (
-#    model_and_diffusion_defaults,
-#    create_model_and_diffusion,
-#    args_to_dict,
-#    add_dict_to_argparser,
-#)
-#from src_diffusion.diffusion_train import TrainLoop
 
 # small helpers to add dict defaults into argparse and convert args to dict
 def infer_type(value):
