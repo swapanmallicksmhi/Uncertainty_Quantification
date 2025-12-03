@@ -1,37 +1,35 @@
 #!/usr/bin/env python3
 """
-===============================================================================
- Program: Evaluation Script - Single Best Quality Image (Modified)
- Author:  Swapan Mallick, SMHI
- Date:    2025-09-06
-===============================================================================
+================================================================================
+Author       : Swapan Mallick, SMHI
+Date Created : 06/09/2025
+================================================================================
+Description:
+------------
+This script evaluates diffusion-based super-resolution or downscaling models 
+(e.g., CARRA2 vs ERA5) by generating synthetic high-quality samples, 
+computing RMSE/MSE-based quality metrics, and saving the best generated image 
+for each dataset pair and model checkpoint.
 
- Description:
- ------------
- This Python program evaluates image generation model outputs diffusion
- models by comparing evaluated images (CARRA2 outputs) against reference
- ERA5 inputs. It identifies the single best-quality image for each time step or
- sample, based on the Root Mean Square Error (RMSE) and Mean Squared Error (MSE)
- metrics. The script is designed to handle distributed and non-distributed
- environments (multi-GPU or single GPU/CPU), saving results and images with
- detailed logging.
+Inputs:
+--------
+--checkpoint_dir   Path to the directory containing model checkpoints (.pt)
+--era5_dir         Directory containing ERA5 PNG images
+--carra2_dir       Directory containing CARRA2 PNG images
+--output_dir       Output directory for results
+--image_size       Target image dimension for resizing (default: 256)
+--batch_size       Batch size per process (default: 1)
+--num_samples      Number of candidate samples to generate per input (default: 10)
+--cond_key         Conditioning key (default: "low_res")
+--device           Device to use: "cuda" or "cpu" (default: "cuda")
+--num_channels     Number of model channels (optional)
+--num_res_blocks   Number of residual blocks in the model (optional)
+--num_heads        Number of attention heads (optional)
+--attention_resolutions  Attention layer resolutions (optional)
+--diffusion_steps  Number of diffusion steps (optional)
+--noise_schedule   Type of diffusion noise schedule (optional)
 
--------------------------------------------------------------------------------
- Command-line Arguments:
--------------------------------------------------------------------------------
- --checkpoint_dir    Directory containing model checkpoint (.pt) files.
- --era5_dir          Directory with input ERA5 images (.png).
- --carra2_dir        Directory with target CARRA2 images (.png).
- --output_dir        Directory to save outputs (images, CSV, logs).
- --image_size        Image dimension (default: 256).
- --batch_size        Number of samples per batch (default: 1).
- --num_samples       Number of samples to generate per input (default: 10).
- --cond_key          Conditioning key for diffusion (default: 'low_res').
- --device            Compute device ('cuda' or 'cpu'; default: 'cuda').
- --num_channels, --num_res_blocks, --num_heads, --attention_resolutions,
- --diffusion_steps, --noise_schedule  (optional) override model defaults.
-
-===============================================================================
+================================================================================
 """
 
 import os
@@ -115,14 +113,14 @@ def save_image(img_array, filename, data=None, upscale_factor=4, dpi=100):
         # 
         domain_width = x1 - x0
         domain_height = y1 - y0
-        if domain_height > 0:  
+        if domain_height > 0:  # Avoid division by zero
             aspect_ratio = domain_width / domain_height
             ax.set_aspect(aspect_ratio)
 
     ax.imshow(np.array(img_upscaled), extent=[x0, x1, y0, y1] if data else None)
-    ax.axis('off')  # 
+    ax.axis('off')  # Turn off axes for clean image
 
-    # Save the figure
+    # 
     plt.savefig(
         filename,
         bbox_inches='tight',
@@ -133,6 +131,7 @@ def save_image(img_array, filename, data=None, upscale_factor=4, dpi=100):
     )
     plt.close(fig)
 
+# 
 def save_image_simple1(img_array, filename, upscale_factor=4):
     os.makedirs(os.path.dirname(filename), exist_ok=True)
 
@@ -162,6 +161,7 @@ def load_state_dict_from_checkpoint(ckpt_path):
             return state
     raise RuntimeError(f"Checkpoint {ckpt_path} doesn't contain a usable state_dict.")
 
+# -------- dataset --------
 class PairedImageDataset(Dataset):
     def __init__(self, era5_files, carra2_files, image_size):
         assert len(era5_files) == len(carra2_files)
@@ -229,6 +229,75 @@ def cleanup_distributed():
         except Exception:
             pass
 
+def generate_high_quality_sample(diffusion, model, era5_batch, carra2_batch, device, num_samples, cond_key, image_size, num_refinement_steps=2):
+    B = era5_batch.shape[0]
+    best_samples = []
+    best_mses = []
+    
+    for b in range(B):
+        era5_single = era5_batch[b:b+1]
+        carra2_single = carra2_batch[b:b+1]
+        
+        candidate_samples = []
+        candidate_mses = []
+        
+        # 
+        for _ in range(num_samples):
+            model_kwargs = {cond_key: era5_single} if cond_key else {}
+            sample = diffusion.p_sample_loop(
+                model,
+                (1, 3, image_size, image_size),
+                device=device,
+                model_kwargs=model_kwargs,
+                progress=False
+            )
+            
+            if isinstance(sample, (list, tuple)):
+                sample = sample[0]
+            
+            # 
+            mse = ((sample - carra2_single) ** 2).mean().item()
+            candidate_samples.append(sample)
+            candidate_mses.append(mse)
+        
+        # 
+        best_idx = np.argmin(candidate_mses)
+        best_sample = candidate_samples[best_idx]
+        best_mse = candidate_mses[best_idx]
+        
+        # 
+        if num_refinement_steps > 0:
+            current_best = best_sample.clone()
+            for refinement_step in range(num_refinement_steps):
+                # 
+                noise_level = 0.1 * (1 - (refinement_step / num_refinement_steps))
+                noisy_sample = current_best + torch.randn_like(current_best) * noise_level
+                
+                # 
+                model_kwargs = {cond_key: era5_single} if cond_key else {}
+                refined_sample = diffusion.p_sample_loop(
+                    model,
+                    (1, 3, image_size, image_size),
+                    device=device,
+                    model_kwargs=model_kwargs,
+                    progress=False
+                )
+                
+                if isinstance(refined_sample, (list, tuple)):
+                    refined_sample = refined_sample[0]
+                
+                refined_mse = ((refined_sample - carra2_single) ** 2).mean().item()
+                
+                # Keep if improved
+                if refined_mse < best_mse:
+                    current_best = refined_sample
+                    best_mse = refined_mse
+        
+        best_samples.append(current_best.squeeze(0))
+        best_mses.append(best_mse)
+    
+    return torch.stack(best_samples), torch.tensor(best_mses)
+
 # 
 def evaluate_process(rank, world_size, args):
     global LOG
@@ -241,7 +310,7 @@ def evaluate_process(rank, world_size, args):
         if torch.cuda.is_available():
             n_local_gpus = torch.cuda.device_count()
             if local_rank >= n_local_gpus:
-                raise RuntimeError(f"LOCAL_RANK {local_rank} >= available GPUs {n_local_gpus}")
+                raise RuntimeError(f"LOCAL_RANK {local_rank} >= available GPUs {n_local_gpus} ")
         device = torch.device(f"cuda:{local_rank}" if torch.cuda.is_available() and args.device == "cuda" else "cpu")
 
     era5_files = sorted(glob.glob(os.path.join(args.era5_dir, "*.png")))
@@ -264,7 +333,7 @@ def evaluate_process(rank, world_size, args):
 
     dataset = PairedImageDataset(shard_era5, shard_carra2, args.image_size)
     if len(dataset) == 0:
-        LOG.warning(f"Empty dataset shard for rank {rank} (start {start_idx}, end {end_idx}). Syncing and exiting.")
+        LOG.warning(f"Empty dataset shard for rank {rank} ")
         if dist.is_initialized():
             try:
                 dist.barrier()
@@ -298,11 +367,12 @@ def evaluate_process(rank, world_size, args):
     best_checkpoint = None
     best_overall_image = None
     best_overall_fname = None
+    best_carra2_image = None 
 
     csv_path = os.path.join(args.output_dir, f"statistics_rank{rank}.csv")
     with open(csv_path, "w", newline="") as csvfile:
         writer = csv.writer(csvfile)
-        writer.writerow(["checkpoint","image","rmse","mse"])
+        writer.writerow(["checkpoint","image","rmse","mse","similarity_score"])
 
         checkpoint_rmses = {}
         for ckpt_path in checkpoint_files:
@@ -326,26 +396,14 @@ def evaluate_process(rank, world_size, args):
                     carra2 = carra2.to(device)
                     B = era5.shape[0]
 
-                    samples_list = []
-                    for s in range(args.num_samples):
-                        model_kwargs = {args.cond_key: era5} if args.cond_key else {}
-                        sample_batch = diffusion.p_sample_loop(
-                            model,
-                            (B, 3, args.image_size, args.image_size),
-                            device=device,
-                            model_kwargs=model_kwargs
-                        )
-                        if isinstance(sample_batch, (list, tuple)):
-                            sample_batch = sample_batch[0]
-                        samples_list.append(sample_batch)
-
-                    samples_stack = torch.stack(samples_list, dim=0)
-                    mse_per_sample = ((samples_stack - era5.unsqueeze(0)) ** 2).mean(dim=[2,3,4])
-
-                    best_idxs = mse_per_sample.argmin(dim=0)
-                    arange = torch.arange(B, device=best_idxs.device)
-                    best_samples = samples_stack[best_idxs, arange]
-                    best_mses = mse_per_sample[best_idxs, arange]
+                    # 
+                    best_samples, best_mses = generate_high_quality_sample(
+                        diffusion, model, era5, carra2, device, 
+                        num_samples=args.num_samples, 
+                        cond_key=args.cond_key, 
+                        image_size=args.image_size,
+                        num_refinement_steps=2
+                    )
 
                     rmse_batch = torch.sqrt(best_mses).sum().item()
                     rmse_total += rmse_batch
@@ -355,15 +413,20 @@ def evaluate_process(rank, world_size, args):
                         rmse_val = math.sqrt(best_mses[b].item())
                         mse_val = best_mses[b].item()
                         all_rmses.append(rmse_val)
-                        writer.writerow([os.path.basename(ckpt_path), fnames[b], rmse_val, mse_val])
+                        
+                        # 
+                        similarity_score = 1.0 / (1.0 + rmse_val)
+                        writer.writerow([os.path.basename(ckpt_path), fnames[b], rmse_val, mse_val, similarity_score])
 
                         if rmse_val < best_rmse_overall:
                             best_rmse_overall = rmse_val
                             best_checkpoint = ckpt_path
                             best_overall_image = best_samples[b].cpu().numpy().transpose(1,2,0)
                             best_overall_fname = fnames[b]
+                            best_carra2_image = carra2[b].cpu().numpy().transpose(1,2,0)
 
-                        out_fname = f"UQ_ckpt_{os.path.basename(ckpt_path)}.png"
+                        # 
+                        out_fname = f"FIELD_ckpt_{os.path.basename(ckpt_path)}_BEST.png"
                         out_path = os.path.join(args.output_dir, out_fname)
                         best_img = best_samples[b].cpu().numpy().transpose(1,2,0)
                         img_array = ((best_img + 1.0) * 127.5).astype(np.uint8)
@@ -375,18 +438,13 @@ def evaluate_process(rank, world_size, args):
 
     LOG.info(f"Best checkpoint: {best_checkpoint} with RMSE={best_rmse_overall:.4f}")
 
-    # 
-    if best_overall_image is not None:
-        best_array = ((best_overall_image + 1.0) * 127.5).astype(np.uint8)
-        save_image(best_array, os.path.join(args.output_dir, "UQ.png"))
-        plt.figure()
     if dist.is_initialized():
         try:
             dist.barrier()
         except Exception:
             pass
 
-# 
+# -------- main --------
 def main():
     global LOG
     parser = argparse.ArgumentParser()

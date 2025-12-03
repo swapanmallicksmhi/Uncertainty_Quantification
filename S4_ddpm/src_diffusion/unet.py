@@ -11,6 +11,8 @@ This module implements:
   as a conditional input.
 
 Author: Swapan Mallick, SMHI
+# Initial date 4 March 2025
+# V1 8 September 2025
 """
 
 import math
