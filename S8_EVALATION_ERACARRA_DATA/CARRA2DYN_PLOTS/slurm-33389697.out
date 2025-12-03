@@ -1,0 +1,76 @@
+[ECMWF-INFO -sbatch] - -------------------------------------------------------------------------------------
+[ECMWF-INFO -sbatch] -  This is the ECMWF jobfilter
+[ECMWF-INFO -sbatch] -  +++ Please report issues using the Support portal +++
+[ECMWF-INFO -sbatch] -  +++ https://support.ecmwf.int                     +++
+[ECMWF-INFO -sbatch] -  /usr/local/bin/ecsbatch: size: 53801, mtime: Tue Nov 25 12:31:30 2025
+[ECMWF-INFO -sbatch] - -------------------------------------------------------------------------------------
+[ECMWF-INFO -sbatch] - Time at submit: Wed Dec  3 10:03:17 2025 (1764756197.5989232) on ac6-102.bullx:/etc/ecmwf/nfs/dh2_perm_b/swe4281/repository/CARRA_QC2025/Uncertainty_Quantification_git/S8_EVALATION_ERACARRA_DATA/CARRA2DYN_PLOTS
+[ECMWF-INFO -sbatch] - --- SLURM VARIABLES ---
+[ECMWF-INFO -sbatch] - EC_CLUSTER=ac
+[ECMWF-INFO -sbatch] - SLURM_EXPORT_ENV=ALL
+[ECMWF-INFO -sbatch] - SBATCH_EXPORT=NONE
+[ECMWF-INFO -sbatch] - -----------------------
+[ECMWF-INFO -sbatch] - jobscript: /etc/ecmwf/nfs/dh2_perm_b/swe4281/repository/CARRA_QC2025/Uncertainty_Quantification_git/S8_EVALATION_ERACARRA_DATA/CARRA2DYN_PLOTS/carr2dyn.job
+[ECMWF-INFO -sbatch] - --- SCRIPT OPTIONS ---
+[ECMWF-INFO -sbatch] - -----------------------
+[ECMWF-INFO -sbatch] - --- POST-PROCESSED OPTIONS ---
+[ECMWF-INFO -sbatch] - ARG --positional=['carr2dyn.job']
+[ECMWF-INFO -sbatch] - ------------------------------
+[ECMWF-INFO -sbatch] - No qos requested, assuming qos=nf
+[ECMWF-INFO -sbatch] - jobtag: swe4281-carr2dyn.job-1x2-/etc/ecmwf/nfs/dh2_perm_b/swe4281/repository/CARRA_QC2025/Uncertainty_Quantification_git/S8_EVALATION_ERACARRA_DATA/CARRA2DYN_PLOTS/slurm-_JOBID_.out
+[ECMWF-INFO -sbatch] - ------------------------------
+[ECMWF-INFO -sbatch] - Average Walltime 48 with a Standard Deviation 0
+[ECMWF-INFO -sbatch] - Runtime history
+[ECMWF-INFO -sbatch] -   Date               | Cores   Cluster   Walltime       Mem
+[ECMWF-INFO -sbatch] -   03.12.2025 - 09:55 | 2          ac         48         8000M     
+[ECMWF-INFO -sbatch] - ['/usr/bin/sbatch', '--qos=nf', '--licenses=h2resw01', '--time=00:00:48', '/etc/ecmwf/nfs/dh2_perm_b/swe4281/repository/CARRA_QC2025/Uncertainty_Quantification_git/S8_EVALATION_ERACARRA_DATA/CARRA2DYN_PLOTS/carr2dyn.job']
+[ECMWF-INFO -sbatch] - sbatch executed on ac
+[ECMWF-INFO -sbatch] - Job queued on ac using method local
+[ECMWF-INFO -sbatch] - Submitted batch job 33389697
+[ECMWF-INFO -ecprofile] /usr/bin/bash NON_INTERACTIVE on ac6-113 at 20251203_100334.500, PID: 4003377, JOBID: 33389697
+[ECMWF-INFO -ecprofile] $SCRATCH=/ec/res4/scratch/swe4281
+[ECMWF-INFO -ecprofile] $PERM=/perm/swe4281
+[ECMWF-INFO -ecprofile] $HPCPERM=/ec/res4/hpcperm/swe4281
+[ECMWF-INFO -ecprofile] $TMPDIR=/etc/ecmwf/ssd/ssd1/tmpdirs/swe4281.33389697
+[ECMWF-INFO -ecprofile] $SCRATCHDIR=/ec/res4/scratchdir/swe4281/1/33389697
+
+Lmod is automatically replacing "prgenv/gnu" with "conda/24.11.3-2".
+
+-------------------------------------------------------------------------------
+There are messages associated with the following module(s):
+-------------------------------------------------------------------------------
+
+conda/24.11.3-2:
+   Using conda effectively disables any other loaded modules. Use "module
+   reset" to return to the default environment.
+
+-------------------------------------------------------------------------------
+
+/scratch/swe4281/DDPM_DATA/CARR2DYN/DATA_JAN19/PLOT
+[ECMWF-INFO -ecepilog] ----------------------------------------------------------------------------------------------------
+[ECMWF-INFO -ecepilog] This is the ECMWF job Epilogue
+[ECMWF-INFO -ecepilog] +++ Please report issues using the Support portal +++
+[ECMWF-INFO -ecepilog] +++ https://support.ecmwf.int                     +++
+[ECMWF-INFO -ecepilog] ----------------------------------------------------------------------------------------------------
+[ECMWF-INFO -ecepilog] Run at 2025-12-03T10:13:09 on ac
+[ECMWF-INFO -ecepilog] JobName                   : carr2dyn.job
+[ECMWF-INFO -ecepilog] JobID                     : 33389697
+[ECMWF-INFO -ecepilog] Submit                    : 2025-12-03T10:03:17
+[ECMWF-INFO -ecepilog] Start                     : 2025-12-03T10:03:30
+[ECMWF-INFO -ecepilog] End                       : 2025-12-03T10:13:09
+[ECMWF-INFO -ecepilog] QueuedTime                : 13.0
+[ECMWF-INFO -ecepilog] ElapsedRaw                : 579
+[ECMWF-INFO -ecepilog] ExitCode                  : 0:0
+[ECMWF-INFO -ecepilog] DerivedExitCode           : 0:0
+[ECMWF-INFO -ecepilog] State                     : COMPLETED
+[ECMWF-INFO -ecepilog] Account                   : sesmhi
+[ECMWF-INFO -ecepilog] QOS                       : nf
+[ECMWF-INFO -ecepilog] User                      : swe4281
+[ECMWF-INFO -ecepilog] StdOut                    : /etc/ecmwf/nfs/dh2_perm_b/swe4281/repository/CARRA_QC2025/Uncertainty_Quantification_git/S8_EVALATION_ERACARRA_DATA/CARRA2DYN_PLOTS/slurm-33389697.out
+[ECMWF-INFO -ecepilog] StdErr                    : /etc/ecmwf/nfs/dh2_perm_b/swe4281/repository/CARRA_QC2025/Uncertainty_Quantification_git/S8_EVALATION_ERACARRA_DATA/CARRA2DYN_PLOTS/slurm-33389697.out
+[ECMWF-INFO -ecepilog] NNodes                    : 1
+[ECMWF-INFO -ecepilog] NCPUS                     : 2
+[ECMWF-INFO -ecepilog] SBU                       : 2.744
+[ECMWF-INFO -ecepilog] jobtag                    : swe4281-carr2dyn.job-1x2-/etc/ecmwf/nfs/dh2_perm_b/swe4281/repository/CARRA_QC2025/Uncertainty_Quantification_git/S8_EVALATION_ERACARRA_DATA/CARRA2DYN_PLOTS/slurm-_JOBID_.out
+[ECMWF-INFO -ecepilog] ----------------------------------------------------------------------------------------------------
+
