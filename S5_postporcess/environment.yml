@@ -1,0 +1,13 @@
+name: coastline_plotting
+channels:
+  - conda-forge
+dependencies:
+  - python>=3.9
+  - numpy
+  - xarray
+  - netcdf4
+  - matplotlib
+  - cartopy
+  - pyproj
+  - scipy
+  - pillow
