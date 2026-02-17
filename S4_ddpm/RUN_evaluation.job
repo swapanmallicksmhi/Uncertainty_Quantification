@@ -1,0 +1,180 @@
+#!/bin/bash
+#===============================================================================
+# Job Name       : HQ_Evaluation
+# Author         : Swapan Mallick, SMHI
+# Date Created   : 06/09/2025
+# Description    :
+#   High-quality evaluation of diffusion-based CARRA2/ERA5 models using SLURM.
+#   The script performs two-step evaluation per anlysis time:
+#     1. SD (standard deviation) evaluation for uncertainty quantification.
+#     2. Final output are in NetCDF and  from evaluation for full-resolution model output.
+# 
+# Features:
+#   - Links model checkpoints dynamically for each date.
+#   - Copies ERA5 and CARRA2 input images for SD .
+#   - Runs distributed PyTorch evaluation via `torchrun` with multiple GPUs.
+#   - Supports configurable image size, batch size, and number of samples.
+#   - Saves outputs in date-specific directories with logs.
+#
+# Inputs:
+#   - VAR        : Variable
+#   - DATE_ARRAY : Dates to process
+#   - CHECKPOINTS: Model checkpoints to evaluate
+#
+# Outputs:
+#   - High-quality images and statistics saved under BASE_OUTPUT
+#   - Logs of each torchrun run in HQ_Evaluation.log
+#
+# Notes:
+#   - Optimized for single-image quality (BATCH_SIZE=1)
+#   - NUM_SAMPLES and NUM_SAMPLES_SD control sampling for SD
+#   - Temporary directories cleaned after processing each date
+#===============================================================================
+
+#-------------------------------
+#SBATCH --job-name=t2m_Evalulation
+#SBATCH --output=t2m_Evalulation.log
+#SBATCH --error=t2m_Evalulation.log
+#SBATCH --qos=ng
+#SBATCH --nodes=1
+#SBATCH --mem=60GB
+#SBATCH --gpus=1
+#SBATCH --time=48:00:00
+#-------------------------------
+
+# Load modules and activate environment
+set -evx
+module load conda
+conda activate ddenv_v2
+
+# Enable CUDA-aware MPI
+export OMPI_MCA_opal_cuda_support=true
+#export OMPI_MCA_pml=ucx
+#export UCX_MEMTYPE_CACHE=n
+
+# ---------------------------
+# Define paths
+# ---------------------------
+VAR="t2m"
+# Generate 6-hourly DATE_ARRAY automatically
+DATE_ARRAY=()
+for t in $(seq 0 6 2); do
+  DATE_ARRAY+=($(date -u -d "2019-10-30 +${t} hour" +"%Y%m%d%H"))
+done
+
+#--Date for validation---
+if [ "$VAR" = "t2m" ]; then
+    CHECKPOINTS=(12)
+elif [ "$VAR" = "u10" ]; then
+    CHECKPOINTS=(14 16 18 20)
+elif [ "$VAR" = "v10" ]; then
+    CHECKPOINTS=(14 16 18 20)
+elif [ "$VAR" = "sp" ]; then
+    CHECKPOINTS=(14 16 18 20 26)
+else
+    echo "Unknown variable: $VAR"
+    exit 1
+fi
+#
+SCR=${PWD}
+MAINDIR="XXX" # Changed input directory
+MODEL_SRC="${MAINDIR}/MODEL/${VAR}"
+CARRA_DYN="${MAINDIR}/VALID_INPUT/${VAR}"
+ERRA_ENS="${MAINDIR}/VALID_INPUT/${VAR}"
+BASE_OUTPUT="${VAR}_MODEL" # Changed output directory
+mkdir -p ${BASE_OUTPUT}
+# ---------------------------
+# Evaluation Flags - OPTIMIZED FOR QUALITY
+# ---------------------------
+IMAGE_SIZE=256
+BATCH_SIZE=1          # Keep at 1 for maximum quality per image
+NUM_SAMPLES=10        #
+WORLD_SIZE=1
+
+export NCCL_DEBUG=INFO
+export TORCH_DISTRIBUTED_DEBUG=DETAIL
+
+# Loop through each date
+for YYMMDDHH in "${DATE_ARRAY[@]}"; do
+    echo "=================================================="
+    echo "Processing date: $YYMMDDHH with NUM_SAMPLES=$NUM_SAMPLES"
+    echo "=================================================="
+    
+    # Create date-specific temporary and output directories
+    TMP="${SCR}/tmp_${VAR}_${YYMMDDHH}"
+    ERA5_SD="${TMP}/ERA5_SD"
+    ERA5_DYN="${TMP}/ERA5_DYN"
+    CARRA2_DYN="${TMP}/CARRA_DYN"
+    CHECKPOINT_DIR="${TMP}/${VAR}"
+    
+    # Create date-specific output directories
+    OUTPUT_SD="${BASE_OUTPUT}/${YYMMDDHH}"
+    
+    # Clean up and create directories
+    rm -rf ${TMP}
+    mkdir -p ${TMP}
+    mkdir -p ${ERA5_SD}
+    mkdir -p ${ERA5_DYN}
+    mkdir -p ${CARRA2_DYN}
+    mkdir -p ${CHECKPOINT_DIR}
+    mkdir -p ${OUTPUT_SD}
+    
+    # Link model checkpoints
+    for ii in "${CHECKPOINTS[@]}"; do
+        SRC_CHECKPOINT="${MODEL_SRC}/model0${ii}000.pt"
+        if [ ! -f "${SRC_CHECKPOINT}" ]; then
+            echo "Warning: source checkpoint not found: ${SRC_CHECKPOINT}, skipping."
+            continue
+        fi
+        ln -sf "${SRC_CHECKPOINT}" "${CHECKPOINT_DIR}"
+    done
+    
+    # Copy date-specific files
+    echo "Copying data files for date: $YYMMDDHH"
+    cp -rf ${ERRA_ENS}/SD_${VAR}_${YYMMDDHH}_era5.png ${ERA5_SD}/
+    cp -rf ${ERRA_ENS}/EnsMEAN_${VAR}_${YYMMDDHH}_era5.png ${ERA5_DYN}/
+    cp -rf ${CARRA_DYN}/hres_${VAR}_${YYMMDDHH}_carra2.png ${CARRA2_DYN}/
+    
+    # 
+    echo "Verifying copied files:"
+    ls -la ${ERA5_SD}/
+    ls -la ${ERA5_DYN}/
+    ls -la ${CARRA2_DYN}/
+    ls -la ${CARRA2_SD}/
+    
+    # 
+    echo "Starting first torchrun evaluation for date: $YYMMDDHH"
+    torchrun --nproc_per_node=$WORLD_SIZE --master_port=29600 evaluate.py \
+        --checkpoint_dir $CHECKPOINT_DIR \
+        --era5_dir $ERA5_SD \
+        --carra2_dir $CARRA2_DYN \
+        --output_dir $OUTPUT_SD  \
+        --image_size $IMAGE_SIZE \
+        --batch_size $BATCH_SIZE \
+        --num_samples $NUM_SAMPLES \
+        --cond_key "" \
+        --num_channels 64 --num_res_blocks 2 --num_heads 4 --attention_resolutions "16,8" --diffusion_steps 4000
+    exit  #SWAPAN 
+    # First torchrun command
+    FIRST_EXIT=$?
+    if [ $FIRST_EXIT -ne 0 ]; then
+        echo "First torchrun command failed for date $YYMMDDHH with exit code: $FIRST_EXIT"
+        echo "Skipping to next date..."
+        continue
+    fi
+    
+    echo "First torchrun completed successfully for date: $YYMMDDHH"
+    #
+    # Clean up temporary files for this date
+    rm -rf ${TMP}
+    
+    echo "=================================================="
+    echo "Completed processing date: $YYMMDDHH"
+    echo "Output saved to: $OUTPUT_SD"
+    echo "=================================================="
+    echo ""
+    
+done
+
+echo "All dates processed successfully with high-quality settings!"
+exit 0
