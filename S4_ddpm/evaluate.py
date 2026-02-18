@@ -5,6 +5,7 @@
  Author:  Swapan Mallick, SMHI
  Date:    2025-09-06
 ===============================================================================
+<<<<<<< HEAD
 
  Description:
  ------------
@@ -32,11 +33,15 @@
  --diffusion_steps, --noise_schedule  (optional) override model defaults.
 
 ===============================================================================
+=======
+Main entry point for the evaluation pipeline.
+>>>>>>> 7315593 (update)
 """
 
 import os
 import sys
 import argparse
+<<<<<<< HEAD
 import glob
 import math
 import traceback
@@ -387,6 +392,13 @@ def evaluate_process(rank, world_size, args):
             pass
 
 # 
+=======
+import traceback
+import torch.distributed as dist
+from src_diffusion.evaluate_utils import setup_rank_logging, save_error_trace, init_distributed_from_env
+from src_diffusion.evaluate_process import evaluate_process
+
+>>>>>>> 7315593 (update)
 def main():
     global LOG
     parser = argparse.ArgumentParser()
@@ -422,7 +434,11 @@ def main():
 
     try:
         try:
+<<<<<<< HEAD
             evaluate_process(rank_for_log if rank is not None else 0, world_size, args)
+=======
+            evaluate_process(rank_for_log if rank is not None else 0, world_size, args, LOG)
+>>>>>>> 7315593 (update)
         except Exception as e:
             tb = traceback.format_exc()
             LOG.error("Unhandled exception in evaluate_process:\n%s", tb)
